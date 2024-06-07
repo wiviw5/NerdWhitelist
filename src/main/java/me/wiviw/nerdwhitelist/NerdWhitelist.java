@@ -5,50 +5,44 @@ import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.plugin.Plugin;
 import com.velocitypowered.api.proxy.ProxyServer;
-import lombok.Getter;
+import lombok.extern.log4j.Log4j2;
 import me.wiviw.nerdwhitelist.events.JoinListener;
 import me.wiviw.nerdwhitelist.util.redis.RedisClient;
-import org.slf4j.Logger;
-import redis.clients.jedis.exceptions.InvalidURIException;
+import redis.clients.jedis.exceptions.JedisConnectionException;
 
 @Plugin(id = "nerdwhitelist", name = "NerdWhitelist", version = "0.0.1", authors = {"WiViW"})
+@Log4j2
 public class NerdWhitelist {
 
 
     private final ProxyServer server;
-    @Getter
-    public static Logger logger;
     public static RedisClient redisClient;
 
     @Inject
-    public NerdWhitelist(ProxyServer server, Logger logger) {
+    public NerdWhitelist(ProxyServer server) {
         this.server = server;
-        NerdWhitelist.logger = logger;
     }
 
     @Subscribe
     public void onProxyInitialization(ProxyInitializeEvent event) {
         if (System.getProperty("db.redis.uri") == null) {
-            getLogger().error("db.redis.uri is null or not set, please set this so the whitelist will work.");
+            log.error("db.redis.uri is null or not set, please set this so the whitelist will work.");
             server.shutdown();
             return;
         }
+
+        // This block is to catch if redis is actually alive, and to start the subscription thread along with sending a request to the bot.
         try {
             redisClient = new RedisClient(System.getProperty("db.redis.uri"));
-        } catch (InvalidURIException exception) {
-            getLogger().error("db.redis.uri is either not set or is invalid, please set this so the whitelist will work.");
+        } catch (JedisConnectionException exception) {
+            log.error("Failed to Connect: {}", exception.toString());
+            server.shutdown();
+            return;
+        } catch (Exception exception) {
+            log.error("db.redis.uri is either not set or is invalid, please set this so the whitelist will work. {}", exception.toString());
             server.shutdown();
             return;
         }
-
-
-
-        /*
-        redisClient.addToSet("members", "ecd2f42e-4879-449e-ac2f-74814ffb9f0b", "3fcdd9d3-8c60-4bda-b45b-406ab6b2ecd1");
-        */
-
-        System.out.println("Set Members: " + redisClient.getSetMembers("members"));
-
 
         server.getEventManager().register(this, new JoinListener());
     }
